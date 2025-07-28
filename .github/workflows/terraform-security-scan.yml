@@ -47,8 +47,22 @@ jobs:
     - name: Generate Terraform Plan
       run: |
         cd ${{ inputs.working_directory }}
-        terraform plan -out=tfplan.out
+        # Create a temporary backend override to use local state for security scanning
+        cat > backend_override.tf << 'EOF'
+        terraform {
+          backend "local" {}
+        }
+        EOF
+        
+        # Re-initialize with local backend
+        terraform init -reconfigure -input=false
+        
+        # Generate plan
+        terraform plan -out=tfplan.out -input=false
         terraform show -json tfplan.out > tfplan.json
+        
+        # Clean up override file
+        rm -f backend_override.tf
         
     - name: Run Trivy scan on Terraform plan
       run: |
