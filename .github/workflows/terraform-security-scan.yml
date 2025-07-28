@@ -38,8 +38,8 @@ jobs:
         framework: terraform
         output_format: cli
         soft_fail: true  # Don't fail on warnings
-        check: --skip-check CKV_TF_1
-        
+        skip_check: CKV_TF_1
+
     - name: Run TFSec Scan
       id: tfsec
       uses: aquasecurity/tfsec-action@v1.0.3
