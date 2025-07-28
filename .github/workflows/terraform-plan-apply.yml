@@ -28,6 +28,8 @@ permissions:
 
 env:
   ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ vars.ARM_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.ARM_TENANT_ID }}
 
 jobs:
   # Terraform Plan - Always runs for both plan and apply actions
