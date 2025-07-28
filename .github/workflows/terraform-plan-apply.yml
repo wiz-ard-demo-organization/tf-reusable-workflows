@@ -27,8 +27,7 @@ permissions:
   pull-requests: write
 
 env:
-  TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+  ARM_USE_OIDC: true
 
 jobs:
   # Terraform Plan - Always runs for both plan and apply actions
@@ -47,10 +46,10 @@ jobs:
     - name: Azure Login via OIDC
       uses: azure/login@v2
       with:
-        client-id: ${{ vars.AZURE_CLIENT_ID }}
-        tenant-id: ${{ vars.AZURE_TENANT_ID }}
-        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          
+        client-id: ${{ vars.ARM_CLIENT_ID }}
+        tenant-id: ${{ vars.ARM_TENANT_ID }}
+        subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
+        
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
@@ -107,9 +106,9 @@ jobs:
     - name: Azure Login via OIDC
       uses: azure/login@v2
       with:
-        client-id: ${{ vars.AZURE_CLIENT_ID }}
-        tenant-id: ${{ vars.AZURE_TENANT_ID }}
-        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        client-id: ${{ vars.ARM_CLIENT_ID }}
+        tenant-id: ${{ vars.ARM_TENANT_ID }}
+        subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
           
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
