@@ -110,6 +110,12 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
       
+    - name: Configure Git for Private Repository Access
+      run: |
+        git config --global url."https://${{ github.token }}@github.com/".insteadOf "https://github.com/"
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+      
     - name: Azure Login via OIDC
       uses: azure/CLI@v2
       with:
