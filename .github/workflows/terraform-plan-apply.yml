@@ -72,6 +72,12 @@ jobs:
       run: |
         cd ${{ inputs.working_directory }}
         terraform plan -var-file="terraform.tfvars" -var-file="global.auto.tfvars" -detailed-exitcode -out=tfplan
+
+    - name: Run Trivy Security Scan
+      uses: ./.github/workflows/trivy-scan.yml
+      with:
+        working_directory: ${{ inputs.working_directory }}
+        plan_file: 'tfplan'
         
     - name: Upload Terraform Plan
       uses: actions/upload-artifact@v4
