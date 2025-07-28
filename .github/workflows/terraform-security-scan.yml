@@ -40,13 +40,41 @@ jobs:
         soft_fail: true  # Don't fail on warnings
         skip_check: CKV_TF_1
 
-    - name: Run Trivy scanner
-      id: trivy
+    - name: Check for tfvars files
+      id: check-tfvars
+      run: |
+        cd ${{ inputs.working_directory }}
+        if [ -f "terraform.tfvars" ] || [ -f "global.auto.tfvars" ]; then
+          echo "tfvars_exist=true" >> $GITHUB_OUTPUT
+          tfvars_files=""
+          [ -f "terraform.tfvars" ] && tfvars_files="terraform.tfvars"
+          [ -f "global.auto.tfvars" ] && tfvars_files="${tfvars_files:+$tfvars_files,}global.auto.tfvars"
+          echo "tfvars_files=$tfvars_files" >> $GITHUB_OUTPUT
+        else
+          echo "tfvars_exist=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Run Trivy scanner (with tfvars)
+      id: trivy-with-tfvars
+      if: steps.check-tfvars.outputs.tfvars_exist == 'true'
       uses: aquasecurity/trivy-action@0.28.0
       with:
         scan-type: 'config'
         scan-ref: '${{ inputs.working_directory }}'
-        tf-vars: 'terraform.tfvars,global.auto.tfvars'
+        tf-vars: '${{ steps.check-tfvars.outputs.tfvars_files }}'
+        format: 'table'
+        severity: 'HIGH,CRITICAL'
+        hide-progress: true
+        output: 'trivy.txt'
+      continue-on-error: true  # Don't fail on warnings
+      
+    - name: Run Trivy scanner (without tfvars)
+      id: trivy-without-tfvars
+      if: steps.check-tfvars.outputs.tfvars_exist == 'false'
+      uses: aquasecurity/trivy-action@0.28.0
+      with:
+        scan-type: 'config'
+        scan-ref: '${{ inputs.working_directory }}'
         format: 'table'
         severity: 'HIGH,CRITICAL'
         hide-progress: true
@@ -58,5 +86,14 @@ jobs:
       run: |
         echo "Security scans completed for directory: ${{ inputs.working_directory }}"
         echo "Checkov scan status: ${{ steps.checkov.outcome }}"
-        echo "Trivy scan status: ${{ steps.trivy.outcome }}"
+        
+        # Check which Trivy step ran and report its status
+        if [ "${{ steps.check-tfvars.outputs.tfvars_exist }}" == "true" ]; then
+          echo "Trivy scan status (with tfvars): ${{ steps.trivy-with-tfvars.outcome }}"
+          echo "Used tfvars files: ${{ steps.check-tfvars.outputs.tfvars_files }}"
+        else
+          echo "Trivy scan status (without tfvars): ${{ steps.trivy-without-tfvars.outcome }}"
+          echo "No tfvars files found - scanned with default Terraform values"
+        fi
+        
         echo "Note: Results are available in the job logs above. SARIF upload disabled (requires GitHub Advanced Security)." 
