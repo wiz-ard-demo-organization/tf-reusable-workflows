@@ -40,17 +40,17 @@ jobs:
         soft_fail: true  # Don't fail on warnings
         skip_check: CKV_TF_1
 
-    - name: Run TFSec Scan
-      id: tfsec
-      uses: aquasecurity/tfsec-action@v1.0.3
-      with:
-        working_directory: ${{ inputs.working_directory }}
-        soft_fail: true  # Don't fail on warnings
+    - name: Run Trivy Config Scan
+      id: trivy
+      run: |
+        cd ${{ inputs.working_directory }}
+        trivy config --tf-vars terraform.tfvars --tf-vars global.auto.tfvars --severity HIGH,CRITICAL --format table .
+      continue-on-error: true  # Don't fail on warnings
         
     - name: Security Scan Summary
       if: always()
       run: |
         echo "Security scans completed for directory: ${{ inputs.working_directory }}"
         echo "Checkov scan status: ${{ steps.checkov.outcome }}"
-        echo "TFSec scan status: ${{ steps.tfsec.outcome }}"
+        echo "Trivy scan status: ${{ steps.trivy.outcome }}"
         echo "Note: Results are available in the job logs above. SARIF upload disabled (requires GitHub Advanced Security)." 
