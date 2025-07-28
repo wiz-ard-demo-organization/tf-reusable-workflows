@@ -1,0 +1,65 @@
+name: 'Reusable Terraform Security Scan'
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: 'Directory containing Terraform files'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  terraform-security-scan:
+    name: 'Terraform Security Scan'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: '1.6.0'  # Fixed version
+        
+    - name: Terraform Init
+      run: |
+        cd ${{ inputs.working_directory }}
+        terraform init -backend=false
+        
+    - name: Run Checkov Scan
+      id: checkov
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: ${{ inputs.working_directory }}
+        framework: terraform
+        output_format: sarif
+        output_file_path: checkov-results.sarif
+        soft_fail: true  # Don't fail on warnings
+        
+    - name: Upload Checkov SARIF Results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: checkov-results.sarif
+        category: checkov-infrastructure
+        
+    - name: Run TFSec Scan
+      id: tfsec
+      uses: aquasecurity/tfsec-sarif-action@v0.1.4
+      with:
+        sarif_file: tfsec-results.sarif
+        working_directory: ${{ inputs.working_directory }}
+        soft_fail: true  # Don't fail on warnings
+        
+    - name: Upload TFSec SARIF Results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: tfsec-results.sarif
+        category: tfsec-infrastructure 

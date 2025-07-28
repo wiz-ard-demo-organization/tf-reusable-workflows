@@ -1,0 +1,213 @@
+name: 'Reusable Kubernetes Deployment'
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: string
+      aks_resource_group:
+        description: 'AKS resource group name'
+        required: true
+        type: string
+      aks_cluster_name:
+        description: 'AKS cluster name'
+        required: true
+        type: string
+      kubernetes_manifests:
+        description: 'Path to Kubernetes manifests'
+        required: true
+        type: string
+      image_tag:
+        description: 'Container image tag to deploy'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace'
+        required: false
+        type: string
+        default: 'default'
+      deployment_name:
+        description: 'Kubernetes deployment name for health check'
+        required: false
+        type: string
+        default: ''
+      service_name:
+        description: 'Kubernetes service name for health check'
+        required: false
+        type: string
+        default: ''
+      validate_wizexercise:
+        description: 'Validate wizexercise.txt in running pod'
+        required: false
+        type: boolean
+        default: false
+      app_selector:
+        description: 'App selector for pod validation'
+        required: false
+        type: string
+        default: 'app=wizapp'
+      health_check_url:
+        description: 'URL path for application health check'
+        required: false
+        type: string
+        default: '/'
+
+permissions:
+  id-token: write   # Required for OIDC authentication
+  contents: read
+
+env:
+  ARM_USE_OIDC: true
+  ARM_USE_AZUREAD: true
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+
+jobs:
+  deploy-to-kubernetes:
+    name: 'Deploy to Kubernetes'
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ inputs.environment }}
+      url: https://portal.azure.com
+      
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Azure Login via OIDC
+      uses: azure/CLI@v1
+      with:
+        azcliversion: latest
+        inlineScript: |
+          az login --service-principal -u ${{ vars.AZURE_CLIENT_ID }} -t ${{ vars.AZURE_TENANT_ID }} --federated-token ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+          az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          
+    - name: Get AKS Credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ inputs.aks_resource_group }} \
+          --name ${{ inputs.aks_cluster_name }} \
+          --overwrite-existing
+          
+    - name: Update Kubernetes Manifests
+      run: |
+        # Update image tag in Kubernetes manifests
+        # This assumes the manifests have a placeholder or existing image reference
+        if [ -f "${{ inputs.kubernetes_manifests }}" ]; then
+          # Replace common image patterns with the new tag
+          sed -i "s|image: .*${{ inputs.image_tag }}.*|image: ${{ inputs.image_tag }}|g" ${{ inputs.kubernetes_manifests }}
+          sed -i "s|acrwizappnonprod001.azurecr.io/wizapp:latest|${{ inputs.image_tag }}|g" ${{ inputs.kubernetes_manifests }}
+          
+          echo "### Updated Kubernetes Manifests 📝" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** ${{ inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f ${{ inputs.kubernetes_manifests }}
+        echo "✅ Kubernetes manifests applied successfully" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Wait for Deployment
+      if: inputs.deployment_name != ''
+      run: |
+        kubectl wait --for=condition=available --timeout=300s deployment/${{ inputs.deployment_name }} -n ${{ inputs.namespace }}
+        echo "✅ Deployment ${{ inputs.deployment_name }} is ready" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Verify Deployment Status
+      run: |
+        echo "### Kubernetes Deployment Status 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** ${{ inputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ inputs.namespace }}" != "default" ]; then
+          echo "**Pods:**" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ inputs.namespace }} >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "**Services:**" >> $GITHUB_STEP_SUMMARY
+          kubectl get svc -n ${{ inputs.namespace }} >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "**Ingress:**" >> $GITHUB_STEP_SUMMARY
+          kubectl get ingress -n ${{ inputs.namespace }} >> $GITHUB_STEP_SUMMARY || echo "No ingress found" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**Pods:**" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "**Services:**" >> $GITHUB_STEP_SUMMARY
+          kubectl get svc >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Validate wizexercise.txt in Running Pod
+      if: inputs.validate_wizexercise
+      run: |
+        if [ "${{ inputs.namespace }}" != "default" ]; then
+          POD_NAME=$(kubectl get pods -n ${{ inputs.namespace }} -l ${{ inputs.app_selector }} -o jsonpath='{.items[0].metadata.name}')
+          if [ ! -z "$POD_NAME" ]; then
+            echo "### wizexercise.txt Validation ✅" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Pod:** $POD_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "**File Contents:**" >> $GITHUB_STEP_SUMMARY
+            kubectl exec -n ${{ inputs.namespace }} $POD_NAME -- cat /app/wizexercise.txt >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+        
+    - name: Application Health Check
+      if: inputs.service_name != ''
+      run: |
+        # Wait for service to be ready
+        sleep 30
+        
+        # Get service endpoint
+        if [ "${{ inputs.namespace }}" != "default" ]; then
+          SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -z "$SERVICE_IP" ]; then
+            SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} -n ${{ inputs.namespace }} -o jsonpath='{.spec.clusterIP}' 2>/dev/null || echo "")
+          fi
+          SERVICE_FQDN="${{ inputs.service_name }}.${{ inputs.namespace }}.svc.cluster.local"
+        else
+          SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -z "$SERVICE_IP" ]; then
+            SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} -o jsonpath='{.spec.clusterIP}' 2>/dev/null || echo "")
+          fi
+          SERVICE_FQDN="${{ inputs.service_name }}.default.svc.cluster.local"
+        fi
+        
+        echo "### Application Health Check 🏥" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Service IP:** $SERVICE_IP" >> $GITHUB_STEP_SUMMARY
+        echo "**Service FQDN:** $SERVICE_FQDN" >> $GITHUB_STEP_SUMMARY
+        
+        # Test application endpoint (within cluster)
+        kubectl run curl-test-$(date +%s) --image=curlimages/curl --rm -i --restart=Never -- \
+          curl -f http://$SERVICE_FQDN${{ inputs.health_check_url }} || true
+          
+    - name: Get Application Access Information
+      run: |
+        echo "### Application Access Information 🌐" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Try to get external IP or URL
+        if [ "${{ inputs.service_name }}" != "" ]; then
+          if [ "${{ inputs.namespace }}" != "default" ]; then
+            EXTERNAL_IP=$(kubectl get svc ${{ inputs.service_name }} -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            INGRESS_URL=$(kubectl get ingress -n ${{ inputs.namespace }} -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null || echo "")
+          else
+            EXTERNAL_IP=$(kubectl get svc ${{ inputs.service_name }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            INGRESS_URL=$(kubectl get ingress -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null || echo "")
+          fi
+          
+          if [ ! -z "$EXTERNAL_IP" ]; then
+            echo "**External IP:** http://$EXTERNAL_IP" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ ! -z "$INGRESS_URL" ]; then
+            echo "**Ingress URL:** http://$INGRESS_URL" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi 
