@@ -50,9 +50,8 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Azure Login via OIDC
-      uses: azure/CLI@v1
+      uses: azure/CLI@v2
       with:
-        azcliversion: latest
         inlineScript: |
           az login --service-principal -u ${{ vars.AZURE_CLIENT_ID }} -t ${{ vars.AZURE_TENANT_ID }} --federated-token ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
           az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -89,7 +88,6 @@ jobs:
         name: terraform-plan-${{ inputs.environment }}
         path: ${{ inputs.working_directory }}/tfplan
         retention-days: 5
-        
 
   # Terraform Apply - Only runs when action is 'apply' and requires manual approval
   terraform-apply:
@@ -113,9 +111,8 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Azure Login via OIDC
-      uses: azure/CLI@v1
+      uses: azure/CLI@v2
       with:
-        azcliversion: latest
         inlineScript: |
           az login --service-principal -u ${{ vars.AZURE_CLIENT_ID }} -t ${{ vars.AZURE_TENANT_ID }} --federated-token ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
           az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID }}
