@@ -76,7 +76,7 @@ jobs:
       id: plan
       run: |
         cd ${{ inputs.working_directory }}
-        terraform plan -detailed-exitcode -out=tfplan
+        terraform plan -var-file="terraform.tfvars" -var-file="global.auto.tfvars" -detailed-exitcode -out=tfplan
         
     - name: Upload Terraform Plan
       uses: actions/upload-artifact@v4
@@ -131,7 +131,7 @@ jobs:
     - name: Terraform Apply
       run: |
         cd ${{ inputs.working_directory }}
-        terraform apply -auto-approve tfplan
+        terraform apply -var-file="terraform.tfvars" -var-file="global.auto.tfvars" -auto-approve tfplan
         
     - name: Capture Terraform Outputs
       id: outputs
