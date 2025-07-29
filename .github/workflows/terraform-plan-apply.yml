@@ -39,11 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     
-    defaults:
-      run:
-        env:
-          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
-    
     outputs:
       plan-status: ${{ steps.plan.outcome }}
       plan-exit-code: ${{ steps.plan.outputs.exit-code }}
@@ -181,11 +176,6 @@ jobs:
       github.event_name == 'workflow_dispatch'
     environment: 
       name: ${{ inputs.environment }}
-      
-    defaults:
-      run:
-        env:
-          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
       
     outputs:
       terraform_outputs: ${{ steps.outputs.outputs.terraform_outputs }}
