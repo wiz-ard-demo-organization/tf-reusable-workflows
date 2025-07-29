@@ -39,8 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     
+    defaults:
+      run:
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ env.TF_PLUGIN_CACHE_DIR }}
+    
     outputs:
       plan-status: ${{ steps.plan.outcome }}
+      plan-exit-code: ${{ steps.plan.outputs.exit-code }}
       
     steps:
     - name: Checkout Code
@@ -85,11 +91,33 @@ jobs:
       run: |
         cd ${{ inputs.working_directory }}
         terraform plan -var-file="terraform.tfvars" -detailed-exitcode -out=tfplan
+        status=$?
+        echo "exit-code=$status" >> $GITHUB_OUTPUT
+        if [ "$status" -eq 1 ]; then exit 1; fi
+
+    - name: Plan Summary
+      if: always()
+      run: |
+        cd ${{ inputs.working_directory }}
+        EXIT_CODE="${{ steps.plan.outputs.exit-code }}"
+        {
+          echo "### Terraform Plan Results"
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "✅ **No changes detected** - Infrastructure is up to date"
+          elif [ "$EXIT_CODE" = "2" ]; then
+            echo "📋 **Changes detected** - Review the plan before applying"
+          elif [ "$EXIT_CODE" = "1" ]; then
+            echo "❌ **Plan failed** - Check the logs for errors"
+          fi
+          echo ""
+        } >> $GITHUB_STEP_SUMMARY
 
     - name: Cache Trivy
       uses: actions/cache@v4
       with:
-        path: /usr/local/bin/trivy
+        path: |
+          /usr/local/bin/trivy
+          ~/.cache/trivy
         key: ${{ runner.os }}-trivy-latest
         restore-keys: |
           ${{ runner.os }}-trivy-
@@ -107,19 +135,28 @@ jobs:
       run: |
         cd ${{ inputs.working_directory }}
         terraform show -json tfplan > tfplan.json
+        trivy config . --format table
         trivy config tfplan.json --format table
         
     - name: Publish Trivy Output to Summary
       run: |
         cd ${{ inputs.working_directory }}
         if [[ -f tfplan.json ]]; then
-          trivy config tfplan.json --format table > trivy-summary.txt
+          trivy config . --format table > trivy-directory-summary.txt
+          trivy config tfplan.json --format table > trivy-plan-summary.txt
           {
             echo "### Trivy Security Scan Results"
-            echo "<details><summary>Click to expand</summary>"
+            echo "<details><summary>Directory Scan - Click to expand</summary>"
             echo ""
             echo '```'
-            cat trivy-summary.txt
+            cat trivy-directory-summary.txt
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "<details><summary>Plan Scan - Click to expand</summary>"
+            echo ""
+            echo '```'
+            cat trivy-plan-summary.txt
             echo '```'
             echo "</details>"
           } >> $GITHUB_STEP_SUMMARY
@@ -144,6 +181,11 @@ jobs:
       github.event_name == 'workflow_dispatch'
     environment: 
       name: ${{ inputs.environment }}
+      
+    defaults:
+      run:
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ env.TF_PLUGIN_CACHE_DIR }}
       
     outputs:
       terraform_outputs: ${{ steps.outputs.outputs.terraform_outputs }}
@@ -190,14 +232,14 @@ jobs:
     - name: Terraform Apply
       run: |
         cd ${{ inputs.working_directory }}
-        terraform apply 
+        terraform apply -input=false --auto-approve tfplan 
         
     - name: Capture Terraform Outputs
       id: outputs
       run: |
         cd ${{ inputs.working_directory }}
         terraform output -json > terraform-outputs.json
-        echo "terraform_outputs=$(cat terraform-outputs.json | jq -c .)" >> $GITHUB_OUTPUT
+        echo "terraform_outputs=$(jq -c . terraform-outputs.json)" >> $GITHUB_OUTPUT
         
     - name: Upload Terraform Outputs
       uses: actions/upload-artifact@v4
