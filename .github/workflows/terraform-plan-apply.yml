@@ -53,6 +53,9 @@ jobs:
         tenant-id: ${{ vars.ARM_TENANT_ID }}
         subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
         
+    - name: Create Terraform Plugin Cache Directory
+      run: mkdir -p ~/.terraform.d/plugin-cache
+        
     - name: Cache Terraform
       uses: actions/cache@v4
       with:
@@ -66,9 +69,6 @@ jobs:
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: '1.6.0'  # Fixed version
-        
-    - name: Create Terraform Plugin Cache Directory
-      run: mkdir -p ~/.terraform.d/plugin-cache
         
     - name: Terraform Init
       run: |
@@ -159,6 +159,9 @@ jobs:
         tenant-id: ${{ vars.ARM_TENANT_ID }}
         subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
           
+    - name: Create Terraform Plugin Cache Directory
+      run: mkdir -p ~/.terraform.d/plugin-cache
+          
     - name: Cache Terraform
       uses: actions/cache@v4
       with:
@@ -172,9 +175,6 @@ jobs:
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: '1.6.0'  # Fixed version
-        
-    - name: Create Terraform Plugin Cache Directory
-      run: mkdir -p ~/.terraform.d/plugin-cache
         
     - name: Download Terraform Plan
       uses: actions/download-artifact@v4
