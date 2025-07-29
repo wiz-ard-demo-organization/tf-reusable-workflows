@@ -42,7 +42,7 @@ jobs:
     defaults:
       run:
         env:
-          TF_PLUGIN_CACHE_DIR: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
     
     outputs:
       plan-status: ${{ steps.plan.outcome }}
@@ -185,7 +185,7 @@ jobs:
     defaults:
       run:
         env:
-          TF_PLUGIN_CACHE_DIR: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
       
     outputs:
       terraform_outputs: ${{ steps.outputs.outputs.terraform_outputs }}
