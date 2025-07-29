@@ -30,7 +30,6 @@ env:
   ARM_USE_OIDC: true
   ARM_CLIENT_ID: ${{ vars.ARM_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.ARM_TENANT_ID }}
-  TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
 
 jobs:
   # Terraform Plan - Always runs for both plan and apply actions
@@ -53,18 +52,6 @@ jobs:
         client-id: ${{ vars.ARM_CLIENT_ID }}
         tenant-id: ${{ vars.ARM_TENANT_ID }}
         subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
-        
-    - name: Create Terraform Plugin Cache Directory
-      run: mkdir -p ~/.terraform.d/plugin-cache
-        
-    - name: Cache Terraform
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.terraform.d/plugin-cache
-        key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
-        restore-keys: |
-          ${{ runner.os }}-terraform-
         
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -106,25 +93,10 @@ jobs:
           fi
           echo ""
         } >> $GITHUB_STEP_SUMMARY
-
-    - name: Cache Trivy
-      uses: actions/cache@v4
-      with:
-        path: |
-          /usr/local/bin/trivy
-          ~/.cache/trivy
-        key: ${{ runner.os }}-trivy-latest
-        restore-keys: |
-          ${{ runner.os }}-trivy-
           
     - name: Install Trivy
       run: |
-        if [ ! -f /usr/local/bin/trivy ]; then
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-          echo "Trivy installed and will be cached for future runs"
-        else
-          echo "Trivy restored from cache"
-        fi
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
     - name: Run Trivy Security Scan
       run: |
@@ -156,6 +128,44 @@ jobs:
             echo "</details>"
           } >> $GITHUB_STEP_SUMMARY
         fi
+
+    - name: Install Checkov
+      run: |
+        pip3 install checkov
+
+    - name: Run Checkov Security Scan
+      run: |
+        cd ${{ inputs.working_directory }}
+        # Scan directory for basic checks
+        checkov -d . --framework terraform --output cli > checkov-directory-summary.txt || true
+        # Scan the terraform plan JSON for comprehensive analysis
+        if [[ -f tfplan.json ]]; then
+          checkov -f tfplan.json --framework terraform --output cli > checkov-plan-summary.txt || true
+        fi
+        
+    - name: Publish Checkov Output to Summary
+      run: |
+        cd ${{ inputs.working_directory }}
+        {
+          echo "### Checkov Security Scan Results"
+          if [[ -f checkov-directory-summary.txt ]]; then
+            echo "<details><summary>Directory Scan - Click to expand</summary>"
+            echo ""
+            echo '```'
+            cat checkov-directory-summary.txt
+            echo '```'
+            echo "</details>"
+            echo ""
+          fi
+          if [[ -f checkov-plan-summary.txt ]]; then
+            echo "<details><summary>Plan Scan - Click to expand</summary>"
+            echo ""
+            echo '```'
+            cat checkov-plan-summary.txt
+            echo '```'
+            echo "</details>"
+          fi
+        } >> $GITHUB_STEP_SUMMARY
         
     - name: Upload Terraform Plan
       uses: actions/upload-artifact@v4
@@ -190,18 +200,6 @@ jobs:
         client-id: ${{ vars.ARM_CLIENT_ID }}
         tenant-id: ${{ vars.ARM_TENANT_ID }}
         subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
-          
-    - name: Create Terraform Plugin Cache Directory
-      run: mkdir -p ~/.terraform.d/plugin-cache
-          
-    - name: Cache Terraform
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.terraform.d/plugin-cache
-        key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
-        restore-keys: |
-          ${{ runner.os }}-terraform-
           
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
