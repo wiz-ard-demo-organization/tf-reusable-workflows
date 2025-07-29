@@ -140,7 +140,7 @@ jobs:
         checkov -d . --framework terraform --output cli > checkov-directory-summary.txt || true
         # Scan the terraform plan JSON for comprehensive analysis
         if [[ -f tfplan.json ]]; then
-          checkov -f tfplan.json --framework terraform --output cli > checkov-plan-summary.txt || true
+          checkov -f tfplan.json --output cli > checkov-plan-summary.txt || true
         fi
         
     - name: Publish Checkov Output to Summary
