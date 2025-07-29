@@ -30,6 +30,7 @@ env:
   ARM_USE_OIDC: true
   ARM_CLIENT_ID: ${{ vars.ARM_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.ARM_TENANT_ID }}
+  TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
 
 jobs:
   # Terraform Plan - Always runs for both plan and apply actions
@@ -52,10 +53,22 @@ jobs:
         tenant-id: ${{ vars.ARM_TENANT_ID }}
         subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
         
+    - name: Cache Terraform
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.terraform.d/plugin-cache
+        key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+        restore-keys: |
+          ${{ runner.os }}-terraform-
+        
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: '1.6.0'  # Fixed version
+        
+    - name: Create Terraform Plugin Cache Directory
+      run: mkdir -p ~/.terraform.d/plugin-cache
         
     - name: Terraform Init
       run: |
@@ -73,9 +86,22 @@ jobs:
         cd ${{ inputs.working_directory }}
         terraform plan -var-file="terraform.tfvars" -detailed-exitcode -out=tfplan
 
+    - name: Cache Trivy
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/bin/trivy
+        key: ${{ runner.os }}-trivy-latest
+        restore-keys: |
+          ${{ runner.os }}-trivy-
+          
     - name: Install Trivy
       run: |
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+        if [ ! -f /usr/local/bin/trivy ]; then
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          echo "Trivy installed and will be cached for future runs"
+        else
+          echo "Trivy restored from cache"
+        fi
 
     - name: Run Trivy Security Scan
       run: |
@@ -133,10 +159,22 @@ jobs:
         tenant-id: ${{ vars.ARM_TENANT_ID }}
         subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
           
+    - name: Cache Terraform
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.terraform.d/plugin-cache
+        key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+        restore-keys: |
+          ${{ runner.os }}-terraform-
+          
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: '1.6.0'  # Fixed version
+        
+    - name: Create Terraform Plugin Cache Directory
+      run: mkdir -p ~/.terraform.d/plugin-cache
         
     - name: Download Terraform Plan
       uses: actions/download-artifact@v4
@@ -152,7 +190,7 @@ jobs:
     - name: Terraform Apply
       run: |
         cd ${{ inputs.working_directory }}
-        terraform apply -var-file="terraform.tfvars" -var-file="global.auto.tfvars" -auto-approve tfplan
+        terraform apply 
         
     - name: Capture Terraform Outputs
       id: outputs
