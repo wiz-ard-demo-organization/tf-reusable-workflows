@@ -1,4 +1,4 @@
-name: 'Reusable TF Plan Apply Pipeline'
+name: 'Reusable TF Plan Apply Destroy Pipeline'
 
 on:
   workflow_call:
@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       action:
-        description: 'Pipeline action: plan (plan-only) or apply (plan+apply)'
+        description: 'Pipeline action: plan (plan-only), apply (plan+apply), or destroy (plan destroy+destroy)'
         required: false
         type: string
         default: 'plan'
@@ -234,4 +234,67 @@ jobs:
       with:
         name: terraform-outputs-${{ inputs.environment }}
         path: ${{ inputs.working_directory }}/terraform-outputs.json
-        retention-days: 30 
+        retention-days: 30
+
+  # Terraform Destroy - Only runs when action is 'destroy' and requires manual approval
+  terraform-destroy:
+    name: 'Terraform Destroy'
+    runs-on: ubuntu-latest
+    if: |
+      inputs.action == 'destroy' &&
+      github.event_name == 'workflow_dispatch'
+    environment: 
+      name: ${{ inputs.environment }}
+      
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Azure Login via OIDC
+      uses: azure/login@v2
+      with:
+        client-id: ${{ vars.ARM_CLIENT_ID }}
+        tenant-id: ${{ vars.ARM_TENANT_ID }}
+        subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
+          
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: '1.6.0'  # Fixed version
+        
+    - name: Terraform Init
+      run: |
+        cd ${{ inputs.working_directory }}
+        terraform init
+          
+    - name: Terraform Plan Destroy
+      id: plan-destroy
+      run: |
+        cd ${{ inputs.working_directory }}
+        terraform plan -destroy -var-file="terraform.tfvars" -out=tfplan-destroy
+        
+    - name: Destroy Plan Summary
+      run: |
+        cd ${{ inputs.working_directory }}
+        {
+          echo "### ⚠️ Terraform Destroy Plan"
+          echo "**WARNING**: This will destroy all resources managed by this Terraform configuration."
+          echo ""
+          echo "Review the plan carefully before proceeding."
+        } >> $GITHUB_STEP_SUMMARY
+        
+    - name: Terraform Destroy
+      run: |
+        cd ${{ inputs.working_directory }}
+        terraform destroy -var-file="terraform.tfvars" -auto-approve
+        
+    - name: Destroy Completion Summary
+      run: |
+        {
+          echo "### ✅ Terraform Destroy Completed"
+          echo "All resources have been destroyed successfully."
+          echo ""
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Directory: ${{ inputs.working_directory }}"
+          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+        } >> $GITHUB_STEP_SUMMARY 
