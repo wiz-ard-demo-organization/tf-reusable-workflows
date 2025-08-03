@@ -61,7 +61,7 @@ jobs:
     - name: Terraform Init
       run: |
         cd ${{ inputs.working_directory }}
-        terraform init
+        terraform init --upgrade
           
     - name: Terraform Validate
       run: |
