@@ -85,11 +85,16 @@ jobs:
         {
           echo "### Terraform Plan Results"
           if [ "$EXIT_CODE" = "0" ]; then
-            echo "✅ **No changes detected** - Infrastructure is up to date"
+            echo "✅ **No changes required** - Infrastructure matches the desired configuration"
           elif [ "$EXIT_CODE" = "2" ]; then
-            echo "📋 **Changes detected** - Review the plan before applying"
+            echo "📋 **Changes required** - Review the plan output above before applying"
+            echo ""
+            echo "This includes:"
+            echo "- Creating new resources"
+            echo "- Modifying existing resources"
+            echo "- Destroying resources"
           elif [ "$EXIT_CODE" = "1" ]; then
-            echo "❌ **Plan failed** - Check the logs for errors"
+            echo "❌ **Plan failed** - Check the logs above for errors"
           fi
           echo ""
         } >> $GITHUB_STEP_SUMMARY
